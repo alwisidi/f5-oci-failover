@@ -51,12 +51,13 @@ JSON='{
 }'
 # ============ Nevermind The Rest :) ============ #
 js () {
-  jq -r ".$1" <<< "$JSON"
+  jq -r ".vnic_$1" <<< "$JSON"
 }
 
 
 # Dowloading the bash script template
 curl https://raw.githubusercontent.com/alwisidi/f5-oci-failover/master/oci-curl -o /config/failover/oci-curl
+# cp -f /config/failover/templates/oci-curl /config/failover/oci-curl
 chmod +x /config/failover/oci-curl
 
 # Modifying Authentication Parameters
@@ -66,18 +67,19 @@ sed -Ei "s/^(.*local keyFingerprint=\").*(\";)$/\1$keyFingerprint\2/" /config/fa
 
 # Creating JSON Objects for Source VNICs
 for i in {1..6}; do
-  echo -e "{\n\s\s\"vnicId\"\s:\s\"$(js vnic_$i.ocid)\"\n}" > /config/failover/$(js vnic_$i.name)
+  echo -e "{\n  \"vnicId\" : \"$(js $i.ocid)\"\n}" > /config/failover/$(js $i.name).json
 done
 
 # Downloading the active file template
-printf '%s\n' '13,$d' w | ed file1 2&>1 /dev/null
+printf '%s\n' '13,$d' w | ed /config/failover/tgactive 2&>1 /dev/null
 curl https://raw.githubusercontent.com/alwisidi/f5-oci-failover/master/tgactive >> /config/failover/tgactive
+# cat /config/failover/templates/tgactive >> /config/failover/tgactive
 
 # Configuring the sources and targets for failing-over
 for i in {1..6}; do
-  IFS=',' read -ra ips <<< $(js vnic_$i.seconderyPrivateIPs)
+  IFS=',' read -ra ips <<< $(js $i.seconderyPrivateIPs)
   for ip in ${ips[@]}; do
-    TMP="/config/failover/oci-curl iaas.$tenancyRegion\.oraclecloud.com PUT /config/failover/$(js vnic_$i.name).json \"/20160918/privateIps/$ip\""
-    sed -Ei "/END/s/^/$TMP\n/" /config/failover/tgactive
+    TMP="  /config/failover/oci-curl iaas.$tenancyRegion.oraclecloud.com PUT /config/failover/$(js $i.name).json \"/20160918/privateIps/$ip\""
+    sed -i "/END/i $TMP" /config/failover/tgactive
   done
 done
